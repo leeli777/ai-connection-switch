@@ -2,7 +2,7 @@
 
 <img src="assets/icon.png" alt="AI 连接开关图标" width="96">
 
-让 Claude 桌面、Claude Code 和 Codex 在 macOS 上使用独立代理。遇到连接问题时，可在桌面开关里切回 Shadowrocket。你需要自备 VLESS Reality 服务器。
+让 Claude 桌面、Claude Code、Codex 和 Gemini 在 macOS 上使用独立代理。遇到连接问题时，可在桌面开关里切回 Shadowrocket。你需要自备 VLESS Reality 服务器。
 
 [English overview](README.en.md) · [MIT License](LICENSE)
 
@@ -29,9 +29,15 @@
 
 3. 按终端提示粘贴你自己的 **IPv4 VLESS + Reality + Vision/TCP** 分享链接。输入会隐藏。也可用 `--link-file` 指向仓库外仅自己可读写的文件。安装器会预检 Claude 和 OpenAI 的连通性。通过后，桌面会出现 **AI 连接开关**。
 4. 打开开关，点 **接入 AI 应用**。等任务空闲后，在开关里分别重开 Claude 和 Codex。Claude 桌面完全退出后，建议继续从开关启动，确保应用收到代理参数。单独运行的 Claude Code 会话请在空闲时自行退出，再启动新会话。
-5. 在每个实际使用的应用里发一条消息，再点 **刷新状态**。拿到实际回复并观察到应用经本机 `1086` 建连后，即可确认接入。**检查连接**只探测未登录的 API，可达时预期返回 HTTP 401。
+5. 在每个实际使用的应用里发一条消息，再点 **刷新状态**。拿到实际回复并观察到应用经本机 `1086` 建连后，即可确认接入。**检查连接**会探测 Claude 和 OpenAI 的 API（预期 HTTP 401）。
 
 安装时会检查本机端口（`1086`、`1087`、`19090`）及同名文件。若已被占用，先核对归属。开关识别 `/Applications` 下的官方 Claude.app，以及带 Codex bundle ID 的 Codex.app 或 ChatGPT.app。其他安装路径、单独的浏览器和外部工具需自行确认代理。
+
+## Gemini 桌面与 Antigravity
+
+在 **AI 连接开关** 点 **重启并接入 Gemini…**，确认任务已空闲后重开 `/Applications/Gemini.app`。然后在 Gemini 内照常打开 Antigravity。开关给 Gemini 及其子进程传入代理，同时保留本地回环直连。发一条短消息或运行一个短任务后点 **刷新状态**，分别查看 Gemini 和 Antigravity 的实际连接。完全退出 Gemini 后，可从开关重新启动以应用代理。
+
+已通过本仓库安装旧版时，在更新后的仓库运行 `/usr/bin/python3 install.py --update`，再重开桌面开关。
 
 ## 回退与卸载
 

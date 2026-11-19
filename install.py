@@ -86,7 +86,7 @@ def build_app(app):
     (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
         'CFBundleIdentifier': ctl.LABEL, 'CFBundleName': 'AI 连接开关',
         'CFBundleExecutable': 'AIConnectionSwitch', 'CFBundlePackageType': 'APPL',
-        'CFBundleShortVersionString': '1.0', 'CFBundleVersion': '1',
+        'CFBundleShortVersionString': '1.1', 'CFBundleVersion': '2',
         'CFBundleIconFile': 'AppIcon.icns', 'LSMinimumSystemVersion': '13.0',
         'NSHighResolutionCapable': True}))
     command([sys.executable, str(ROOT / 'memguard.py'), '--max-gb', '3', '--timeout', '150', '--',
@@ -245,14 +245,49 @@ def install(args):
     print('打开开关，点“接入 AI 应用”，再在任务空闲时逐个重新打开。')
 
 
+def update():
+    if sys.platform != 'darwin' or os.getuid() == 0:
+        raise RuntimeError('请在已登录的 macOS 桌面用户下更新。')
+    app = ctl.HOME / 'Applications' / APP_NAME
+    info = app / 'Contents/Info.plist'
+    helper = ctl.BASE / 'ai_switch_control.py'
+    if (app.is_symlink() or not info.is_file() or
+            plistlib.loads(info.read_bytes()).get('CFBundleIdentifier') != ctl.LABEL or
+            not helper.is_file() or helper.is_symlink()):
+        raise RuntimeError('没有找到本项目的旧版安装。请参照 README 安装，或保留已有的其他开关。')
+    with (ctl.BASE / 'switch.lock').open('a') as lock:
+        ctl.fcntl.flock(lock, ctl.fcntl.LOCK_EX)
+        with tempfile.TemporaryDirectory(prefix='ai-switch-update-', dir=app.parent) as temp:
+            candidate = Path(temp) / APP_NAME
+            old_app = Path(temp) / 'previous.app'
+            build_app(candidate)
+            app.rename(old_app)
+            try:
+                candidate.rename(app)
+                ctl.atomic(helper, (ROOT / 'ai_switch_control.py').read_bytes())
+            except BaseException:
+                if app.exists():
+                    app.rename(candidate)
+                old_app.rename(app)
+                raise
+    print('桌面开关已更新。若窗口已打开，退出开关后重新打开即可。')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--interface', required=True, help='实际联网的 Wi-Fi/有线接口，例如 en0')
+    parser.add_argument('--interface', help='实际联网的 Wi-Fi/有线接口，例如 en0')
     parser.add_argument('--sing-box', help='已安装的 sing-box 可执行文件路径')
     parser.add_argument('--shadowrocket-port', type=int, default=1082, help='本机 Shadowrocket HTTP 端口')
     parser.add_argument('--link-file', type=Path, help='可选，仓库外权限为 600 的私密链接文件')
+    parser.add_argument('--update', action='store_true', help='更新已安装的开关和控制程序')
+    args = parser.parse_args()
+    if not args.update and not args.interface:
+        parser.error('新安装需要 --interface')
     try:
-        install(parser.parse_args())
+        if args.update:
+            update()
+        else:
+            install(args)
     except (RuntimeError, OSError, subprocess.SubprocessError, KeyboardInterrupt) as error:
         print(str(error) if isinstance(error, RuntimeError) else '安装没有完成；请检查权限、依赖或超时。', file=sys.stderr)
         sys.exit(1)

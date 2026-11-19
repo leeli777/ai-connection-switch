@@ -127,7 +127,7 @@ def restore():
 
 def status():
     result = {'serviceAvailable': False, 'mode': 'unavailable', 'entry': 'other',
-              'codexRestartRequired': True, 'claudeDesktop': 'unknown', 'claudeCode': 'unknown'}
+              'codexRestartRequired': True, 'claudeDesktop': 'unknown', 'claudeCode': 'unknown', 'geminiDesktop': 'unknown', 'antigravityAgent': 'unknown'}
     fallback = control()['shadowrocket_port']
     try:
         current = api()['now']
@@ -148,7 +148,7 @@ def status():
     if result['entry'] == 'other' and result['serviceAvailable']:
         result['mode'] = 'unattached'
     try:
-        apps = {'codex': set(), 'claudeDesktop': set(), 'claudeCode': set()}
+        apps = {'codex': set(), 'claudeDesktop': set(), 'claudeCode': set(), 'geminiDesktop': set(), 'antigravityAgent': set()}
         for row in subprocess.check_output(['/bin/ps', '-axo', 'pid=,comm='], text=True).splitlines():
             fields = row.strip().split(None, 1)
             if len(fields) != 2:
@@ -156,14 +156,19 @@ def status():
             pid, name = fields
             if name.startswith('/Applications/Claude.app/Contents/'):
                 apps['claudeDesktop'].add(pid)
+            if name == '/Applications/Gemini.app/Contents/Helpers/agy':
+                apps['antigravityAgent'].add(pid)
+            elif name.startswith('/Applications/Gemini.app/Contents/'):
+                apps['geminiDesktop'].add(pid)
             if '/claude.app/Contents/MacOS/claude' in name or name.endswith('/.local/bin/claude') or name.startswith(str(HOME / '.local/share/claude/versions') + '/'):
                 apps['claudeCode'].add(pid)
             if re.match(r'^/Applications/(ChatGPT|Codex)\.app/Contents/', name) and name.endswith('/codex'):
                 apps['codex'].add(pid)
         sockets = subprocess.run(
-            ['/usr/sbin/lsof', '-nP', f'-iTCP:{ENTRY}', f'-iTCP:{fallback}', '-sTCP:ESTABLISHED', '-Fpn'],
+            ['/usr/sbin/lsof', '-nP', '-iTCP', '-sTCP:ESTABLISHED', '-Fpn'],
             capture_output=True, text=True, timeout=5).stdout
         pid, connections = None, {}
+        agent_external = False
         for line in sockets.splitlines():
             if line.startswith('p'):
                 pid = line[1:]
@@ -171,11 +176,19 @@ def status():
                 m = re.search(r'->127\.0\.0\.1:(\d+)$', line)
                 if m:
                     connections.setdefault(pid, set()).add(int(m[1]))
+                if pid in apps['antigravityAgent'] and '->' in line:
+                    peer = line.split('->', 1)[1]
+                    agent_external |= not peer.startswith(('127.', '[::1]:'))
         for name, pids in apps.items():
             ports = {p for pid in pids for p in connections.get(pid, ()) if p in (ENTRY, fallback)}
             state = 'closed' if not pids else 'waiting' if not ports else 'legacy'
             if port in ports and result['entry'] != 'other':
                 state = 'connected' if len(ports) == 1 else 'mixed'
+            if name == 'antigravityAgent' and agent_external:
+                if state == 'waiting':
+                    state = 'external'
+                elif state == 'connected':
+                    state = 'mixed'
             if name == 'codex':
                 result['codexRestartRequired'] = state != 'connected'
                 result['codexState'] = state
@@ -191,14 +204,15 @@ def health(port):
         return [{'target': '系统负载较高，暂缓检测', 'ok': False}]
     checks = []
     guard = BASE / 'memguard.py'
-    for name, url in (('Claude', 'https://api.anthropic.com/v1/models'),
-                      ('OpenAI', 'https://api.openai.com/v1/models')):
+    targets = [('Claude', 'https://api.anthropic.com/v1/models', '401'),
+               ('OpenAI', 'https://api.openai.com/v1/models', '401')]
+    for name, url, expected in targets:
         p = subprocess.run([sys.executable, str(guard), '--max-gb', '3', '--timeout', '12', '--',
                             '/usr/bin/curl', '-q', '--silent', '--show-error', '--noproxy', '',
                             '--proxy', proxy_url(port), '--connect-timeout', '4', '--max-time', '8',
                             '--output', '/dev/null', '--write-out', '%{http_code}', url],
                            capture_output=True, text=True, timeout=15)
-        checks.append({'target': name, 'ok': p.returncode == 0 and p.stdout == '401', 'http': p.stdout[-3:]})
+        checks.append({'target': name, 'ok': p.returncode == 0 and p.stdout == expected, 'http': p.stdout[-3:]})
     return checks
 
 

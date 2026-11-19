@@ -2,6 +2,7 @@
 """Isolated smoke test: temporary files, loopback ports and a synthetic node only."""
 import base64
 import json
+import plistlib
 from pathlib import Path
 import secrets
 import shutil
@@ -11,9 +12,11 @@ import sys
 import tempfile
 import time
 import uuid
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ai_switch_control as ctl
+import install
 from install import build_app, make_config, parse_vless
 
 
@@ -90,6 +93,25 @@ def main(binary):
         build_app(app)
         assert (app / 'Contents/Resources/AppIcon.icns').is_file()
         print('PASS: macOS app builds, icon included, signature verifies', flush=True)
+
+        # Exercise the upgrade against an existing installation, reusing the signed build.
+        installed_app = home / 'Applications' / install.APP_NAME
+        info = installed_app / 'Contents/Info.plist'
+        info.parent.mkdir(parents=True)
+        info.write_bytes(plistlib.dumps({'CFBundleIdentifier': ctl.LABEL, 'CFBundleVersion': '1'}))
+        shortcut = home / 'Desktop' / install.APP_NAME
+        shortcut.parent.mkdir()
+        shortcut.symlink_to(installed_app)
+        helper = ctl.BASE / 'ai_switch_control.py'
+        helper.write_text('previous helper')
+        config_before = config_path.read_bytes()
+        with patch.object(install, 'build_app', side_effect=lambda candidate: shutil.copytree(app, candidate)):
+            install.update()
+        assert plistlib.loads(info.read_bytes())['CFBundleVersion'] == '2'
+        assert helper.read_bytes() == (install.ROOT / helper.name).read_bytes()
+        assert shortcut.resolve() == installed_app.resolve()
+        assert config_path.read_bytes() == config_before
+        print('PASS: upgrade retains the existing proxy configuration and desktop shortcut', flush=True)
 
 
 if __name__ == '__main__':

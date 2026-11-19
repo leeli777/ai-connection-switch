@@ -13,3 +13,7 @@ uptime
 /usr/bin/python3 memguard.py --max-gb 3 --timeout 210 -- \
   /usr/bin/python3 tests/smoke.py /path/to/sing-box
 ```
+
+## Gemini 桌面
+
+本机确认 Antigravity 由 Gemini macOS 应用内的 `agy` 子进程运行。开关验证分别识别桌面应用和 Agent 的实际连接，并完成签名与隔离升级测试。检测时 Antigravity 有任务正在执行，已保留该会话，实际迁移留待任务空闲后验收。

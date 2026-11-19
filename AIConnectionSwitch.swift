@@ -7,17 +7,34 @@ let connectionAppIcon: NSImage = {
 }()
 
 enum AITarget {
-    case codex, claude
-    var title: String { self == .codex ? "Codex" : "Claude" }
+    case codex, claude, gemini
+
+    var title: String {
+        switch self {
+        case .codex: return "Codex"
+        case .claude: return "Claude"
+        case .gemini: return "Gemini"
+        }
+    }
     var paths: [String] {
-        self == .codex ? ["/Applications/Codex.app", "/Applications/ChatGPT.app"] : ["/Applications/Claude.app"]
+        switch self {
+        case .codex: return ["/Applications/Codex.app", "/Applications/ChatGPT.app"]
+        case .claude: return ["/Applications/Claude.app"]
+        case .gemini: return ["/Applications/Gemini.app"]
+        }
     }
     var path: String? {
         let verified = paths.filter { Bundle(path: $0)?.bundleIdentifier == identifier }
         let active = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
         return verified.first { path in active.contains { $0.bundleURL?.standardizedFileURL.path == path } } ?? verified.first
     }
-    var identifier: String { self == .codex ? "com.openai.codex" : "com.anthropic.claudefordesktop" }
+    var identifier: String {
+        switch self {
+        case .codex: return "com.openai.codex"
+        case .claude: return "com.anthropic.claudefordesktop"
+        case .gemini: return "com.google.GeminiMacOS"
+        }
+    }
     func running(at path: String) -> [NSRunningApplication] {
         NSRunningApplication.runningApplications(withBundleIdentifier: identifier).filter { $0.bundleURL?.standardizedFileURL.path == path }
     }
@@ -31,6 +48,8 @@ final class SwitchModel: ObservableObject {
     @Published var proxyPort = 1086
     @Published var claudeDesktop = "unknown"
     @Published var claudeCode = "unknown"
+    @Published var geminiDesktop = "unknown"
+    @Published var antigravityAgent = "unknown"
     let helper = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/AIConnectionSwitch/ai_switch_control.py").path
     func run(_ action: String, notice: String? = nil) {
         guard !busy else { return }
@@ -54,6 +73,8 @@ final class SwitchModel: ObservableObject {
                     if let n = result["proxyPort"] as? Int { self.proxyPort = n }
                     if let n = result["claudeDesktop"] as? String { self.claudeDesktop = n }
                     if let n = result["claudeCode"] as? String { self.claudeCode = n }
+                    if let n = result["geminiDesktop"] as? String { self.geminiDesktop = n }
+                    if let n = result["antigravityAgent"] as? String { self.antigravityAgent = n }
                     if let checks = result["checks"] as? [[String: Any]] {
                         self.message = checks.map { ($0["target"] as? String ?? "AI") + (($0["ok"] as? Bool == true) ? "：可连接" : "：暂未通过") }.joined(separator: "   ")
                     } else {
@@ -70,11 +91,14 @@ final class SwitchModel: ObservableObject {
             message = "AI 入口未就绪。请先刷新状态，或使用紧急恢复。"; return
         }
         guard let path = target.path else {
-            message = "未在 /Applications 找到可识别的 \(target.title)。"; return
+            message = "未在 /Applications 找到可识别的 \(target.title) 客户端。"; return
         }
         let alert = NSAlert()
         alert.messageText = "重新打开 \(target.title)，使代理入口生效？"
         alert.informativeText = "这会暂停 \(target.title) 中正在运行的任务。请先保存工作，并确认会话已空闲。VPN 和另一个 AI 应用不会被关闭。"
+        if target == .gemini {
+            alert.informativeText = "请确认 Gemini 和 Antigravity 的任务已完成。重开后可在 Gemini 内继续使用 Antigravity。"
+        }
         alert.addButton(withTitle: "重启并迁移")
         alert.addButton(withTitle: "暂不重启")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -98,8 +122,13 @@ final class SwitchModel: ObservableObject {
             let url = "http://127.0.0.1:\(port)"
             env["HTTP_PROXY"] = url; env["HTTPS_PROXY"] = url; env["ALL_PROXY"] = url
             env["NO_PROXY"] = "localhost,127.0.0.1,::1"
+            if target == .gemini {
+                env["http_proxy"] = url; env["https_proxy"] = url; env["all_proxy"] = url
+                env["no_proxy"] = env["NO_PROXY"]
+            } else {
+                config.arguments = ["--proxy-server=\(url)"]
+            }
             config.environment = env
-            config.arguments = ["--proxy-server=\(url)"]
             config.activates = true
             NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: config) { app, error in
                 DispatchQueue.main.async {
@@ -111,6 +140,7 @@ final class SwitchModel: ObservableObject {
             }
         }
     }
+
 }
 
 struct SwitchView: View {
@@ -128,6 +158,7 @@ struct SwitchView: View {
         switch state {
         case "connected": return "已接入"
         case "legacy": return "仍走旧入口"
+        case "external": return "有外部连接，未观察到代理"
         case "mixed": return "新旧入口混用"
         case "closed": return "未打开"
         case "waiting": return "等待发送消息验证"
@@ -167,6 +198,12 @@ struct SwitchView: View {
                 Button("重启并接入 Codex…") { model.restartApp(.codex) }.disabled(model.busy || !model.canOpenAIApps)
                 Button("重启并接入 Claude…") { model.restartApp(.claude) }.disabled(model.busy || !model.canOpenAIApps)
             }
+            HStack {
+                Button("重启并接入 Gemini…") { model.restartApp(.gemini) }
+                Spacer()
+            }.disabled(model.busy || !model.canOpenAIApps)
+            Text("Gemini：\(routeLabel(model.geminiDesktop))   Antigravity：\(routeLabel(model.antigravityAgent))")
+                .font(.caption).foregroundColor(.secondary)
             Text("Codex：\(routeLabel(model.codexState))   Claude 桌面：\(routeLabel(model.claudeDesktop))   Code：\(routeLabel(model.claudeCode))")
                 .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }.padding(26).frame(width: 520)
@@ -183,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(NSMenuItem(title: "退出 AI 连接开关", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.submenu = appMenu; NSApp.mainMenu = menu
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 572, height: 485), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 572, height: 547), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "AI 连接开关"
         window.contentView = NSHostingView(rootView: SwitchView(model: model))
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
