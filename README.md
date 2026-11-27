@@ -60,3 +60,11 @@ helper="$HOME/Library/Application Support/AIConnectionSwitch/ai_switch_control.p
 - `~/Library/Application Support/AIConnectionSwitch`（包含节点凭据和代理设置备份）
 
 代理和控制端口只监听 `127.0.0.1`。如需提交 Issue，请提供 macOS、应用和 sing-box 版本，并去除节点链接、密钥、账号和私有配置。测试方法见 [验证记录](VALIDATION.md)。
+
+### Antigravity 和节点分享链接
+
+在桌面开关中点击「接入 Antigravity」可通过选定的独立线路启动 Antigravity 桌面应用。点击「打开 agy CLI」会在终端启动 Antigravity CLI。已有终端也可以运行 `"$HOME/Library/Application Support/AIConnectionSwitch/Antigravity-CLI.command" models`。这两个入口固定使用本机独立代理端口 1087。
+
+在 Shadowrocket 中复制单个节点的分享链接，然后点击「从剪贴板导入节点」。在「独立线路」菜单里选择保存的节点后，使用该独立线路的 AI 应用会重新连接。原有节点也保留在菜单中。切换时程序通过新线路请求 Google 的连通性检查地址，失败会尝试恢复原配置。
+
+支持常用 VLESS（含 Shadowrocket Base64 格式、Reality、WS、gRPC）、Hysteria2、Trojan 和无插件 Shadowsocks 单节点链接。订阅地址及未支持的传输参数会提示导入失败。节点凭据保存在本机当前用户专用的配置文件中。

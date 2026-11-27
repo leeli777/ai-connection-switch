@@ -148,12 +148,14 @@ def status():
     if result['entry'] == 'other' and result['serviceAvailable']:
         result['mode'] = 'unattached'
     try:
-        apps = {'codex': set(), 'claudeDesktop': set(), 'claudeCode': set(), 'geminiDesktop': set(), 'antigravityAgent': set()}
+        apps = {'codex': set(), 'claudeDesktop': set(), 'claudeCode': set(), 'geminiDesktop': set(), 'antigravityAgent': set(), 'antigravityDesktop': set()}
         for row in subprocess.check_output(['/bin/ps', '-axo', 'pid=,comm='], text=True).splitlines():
             fields = row.strip().split(None, 1)
             if len(fields) != 2:
                 continue
             pid, name = fields
+            if name.startswith('/Applications/Antigravity.app/Contents/'):
+                apps['antigravityDesktop'].add(pid)
             if name.startswith('/Applications/Claude.app/Contents/'):
                 apps['claudeDesktop'].add(pid)
             if name == '/Applications/Gemini.app/Contents/Helpers/agy':
@@ -180,9 +182,10 @@ def status():
                     peer = line.split('->', 1)[1]
                     agent_external |= not peer.startswith(('127.', '[::1]:'))
         for name, pids in apps.items():
-            ports = {p for pid in pids for p in connections.get(pid, ()) if p in (ENTRY, fallback)}
+            ports = {p for pid in pids for p in connections.get(pid, ()) if p in (ENTRY, CHECK, fallback)}
             state = 'closed' if not pids else 'waiting' if not ports else 'legacy'
-            if port in ports and result['entry'] != 'other':
+            fixed = name in ('antigravityAgent', 'antigravityDesktop')
+            if (CHECK if fixed else port) in ports and (fixed or result['entry'] != 'other'):
                 state = 'connected' if len(ports) == 1 else 'mixed'
             if name == 'antigravityAgent' and agent_external:
                 if state == 'waiting':

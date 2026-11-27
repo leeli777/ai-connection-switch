@@ -24,3 +24,5 @@ A desktop switch for routing Claude Desktop, Claude Code, Codex and Gemini throu
 Use **重启并接入 Gemini…** (Restart and connect Gemini) when the app is idle. This launches the official macOS Gemini app with a proxy for the new process and its children. Open Antigravity inside Gemini as usual. Run a short task, then refresh the switch to see observed Gemini and Antigravity proxy connections separately.
 
 To update an existing installation, pull the latest source, run `/usr/bin/python3 install.py --update` and reopen the switch.
+
+Use the Antigravity desktop and agy CLI buttons to start either client through the fixed independent proxy. Copy a single Shadowrocket share link and use the clipboard import button. Select a saved node from the independent route menu to apply it. Switching reconnects AI sessions using the local proxy. The original route remains available. Supported links include common VLESS (including Shadowrocket Base64), Hysteria2, Trojan, and plain Shadowsocks configurations.

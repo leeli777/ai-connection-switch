@@ -193,8 +193,9 @@ def install(args):
         secret = secrets.token_urlsafe(32)
         ctl.atomic(base / 'config.json', json.dumps(make_config(node, secret, args.shadowrocket_port, base)))
         ctl.atomic(base / 'control.json', json.dumps({'secret': secret, 'shadowrocket_port': args.shadowrocket_port}))
-        for name in ('ai_switch_control.py', 'memguard.py'):
+        for name in ('ai_switch_control.py', 'memguard.py', 'node_routes.py', 'Antigravity-CLI.command'):
             shutil.copyfile(ROOT / name, base / name)
+        (base / 'Antigravity-CLI.command').chmod(0o700)
         # Keep the checked version independent of future Homebrew cleanup.
         shutil.copy2(binary, base / 'sing-box')
         command([str(base / 'sing-box'), 'check', '-c', str(base / 'config.json')],
@@ -264,6 +265,9 @@ def update():
             app.rename(old_app)
             try:
                 candidate.rename(app)
+                for name in ('node_routes.py', 'Antigravity-CLI.command'):
+                    ctl.atomic(ctl.BASE / name, (ROOT / name).read_bytes())
+                (ctl.BASE / 'Antigravity-CLI.command').chmod(0o700)
                 ctl.atomic(helper, (ROOT / 'ai_switch_control.py').read_bytes())
             except BaseException:
                 if app.exists():
